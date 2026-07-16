@@ -164,8 +164,10 @@ def build_data(n_tx, n_customers, fraud_rate, seed):
     night = rng.random(n_base) < 0.08                        # ~8% legit night owls
     hour = np.where(night, rng.integers(0, 6, n_base), hour)
     minute = rng.integers(0, 60, size=n_base)
+    second = rng.integers(0, 60, size=n_base)                # sub-minute jitter -> no same-minute peek
     ts = (date_start + day * np.timedelta64(1, "D")
-          + hour * np.timedelta64(1, "h") + minute * np.timedelta64(1, "m"))
+          + hour * np.timedelta64(1, "h") + minute * np.timedelta64(1, "m")
+          + second * np.timedelta64(1, "s"))
 
     amount = np.exp(rng.normal(seg_mu[cust], seg_sigma[cust])).round(2)
     card = first_card[cust] + rng.integers(0, n_cards[cust])
@@ -210,6 +212,11 @@ def build_data(n_tx, n_customers, fraud_rate, seed):
         "_is_fraud": False,
     })
 
+    # earliest legit day per customer -> we seat fraud AFTER some history exists,
+    # so amount deviation is measured against real established behaviour
+    first_legit_day = np.full(C, n_days, dtype=int)
+    np.minimum.at(first_legit_day, cust, day)
+
     # ==================================================================
     # FRAUD episodes
     # ==================================================================
@@ -244,7 +251,9 @@ def build_data(n_tx, n_customers, fraud_rate, seed):
         card = int(first_card[v] + rng.integers(0, n_cards[v]))
         dev = int(rng.choice(fraud_dev_ids))                 # shared pool -> cards-per-device signal
         typ = float(np.exp(seg_mu[v]))
-        day0 = int(rng.integers(0, n_days))
+        # start the episode >=45 days after the victim's first legit op (clamped)
+        lo = max(0, min(int(first_legit_day[v]) + 45, n_days - 10))
+        day0 = int(rng.integers(lo, n_days))
         arch = archs[int(rng.choice(len(archs), p=arch_p))]
 
         if arch == "foreign_cnp":                            # abroad, night, big amounts
@@ -254,7 +263,8 @@ def build_data(n_tx, n_customers, fraud_rate, seed):
             h0 = int(rng.integers(0, 6))
             for i in range(burst):
                 t = (date_start + day0 * np.timedelta64(1, "D") + h0 * np.timedelta64(1, "h")
-                     + i * int(rng.integers(2, 25)) * np.timedelta64(1, "m"))
+                     + i * int(rng.integers(2, 25)) * np.timedelta64(1, "m")
+                     + int(rng.integers(0, 60)) * np.timedelta64(1, "s"))
                 appr = not (i < 2 and rng.random() < 0.5)
                 add(v, card, dev, int(rng.choice(cnp_merch)), typ * rng.uniform(3, 15),
                     fc, fc, "ecom", "cnp", True, appr, "05", t,
@@ -274,7 +284,8 @@ def build_data(n_tx, n_customers, fraud_rate, seed):
             h0 = int(rng.integers(0, 24))
             for i in range(burst):
                 t = (date_start + day0 * np.timedelta64(1, "D") + h0 * np.timedelta64(1, "h")
-                     + i * int(rng.integers(1, 5)) * np.timedelta64(1, "m"))
+                     + i * int(rng.integers(1, 5)) * np.timedelta64(1, "m")
+                     + int(rng.integers(0, 60)) * np.timedelta64(1, "s"))
                 appr = rng.random() < 0.35                   # testing -> mostly declined
                 add(v, card, dev, int(rng.choice(cnp_merch)), rng.uniform(30, 400),
                     country, ip, "ecom", "cnp", True, appr, "05", t,
@@ -287,7 +298,8 @@ def build_data(n_tx, n_customers, fraud_rate, seed):
             h0 = int(np.clip(rng.normal(14, 4), 0, 23))
             for i in range(burst):
                 t = (date_start + day0 * np.timedelta64(1, "D") + h0 * np.timedelta64(1, "h")
-                     + i * int(rng.integers(3, 40)) * np.timedelta64(1, "m"))
+                     + i * int(rng.integers(3, 40)) * np.timedelta64(1, "m")
+                     + int(rng.integers(0, 60)) * np.timedelta64(1, "s"))
                 chan = "web" if rng.random() < 0.5 else "mobile"
                 add(v, card, dev, int(rng.choice(all_merch)), typ * rng.uniform(2, 8),
                     "RU", "RU", chan, "cnp", True, True, "05", t,
@@ -300,7 +312,8 @@ def build_data(n_tx, n_customers, fraud_rate, seed):
             h0 = int(rng.integers(0, 24))
             for i in range(burst):
                 t = (date_start + day0 * np.timedelta64(1, "D") + h0 * np.timedelta64(1, "h")
-                     + i * int(rng.integers(5, 30)) * np.timedelta64(1, "m"))
+                     + i * int(rng.integers(5, 30)) * np.timedelta64(1, "m")
+                     + int(rng.integers(0, 60)) * np.timedelta64(1, "s"))
                 add(v, card, dev, int(rng.choice(cash_merch)), rng.uniform(5000, 60000),
                     "RU", None, "atm", "card_present", False, True, "05", t,
                     lat0 + rng.normal(0, 0.05), lon0 + rng.normal(0, 0.05))
@@ -408,7 +421,7 @@ def main():
                    help="prod is ~0.0005; inflated for a workable local stand")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--db-host", default=os.environ.get("DB_HOST", "127.0.0.1"))
-    p.add_argument("--db-port", default=os.environ.get("DB_PORT", "55432"))
+    p.add_argument("--db-port", default=os.environ.get("DB_PORT", "5432"))
     p.add_argument("--db-name", default=os.environ.get("DB_NAME", "cardops"))
     p.add_argument("--db-user", default=os.environ.get("DB_USER", "cardops"))
     p.add_argument("--db-password", default=os.environ.get("DB_PASSWORD", "cardops_pwd"))
