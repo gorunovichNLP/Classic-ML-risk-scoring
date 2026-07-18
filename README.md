@@ -24,3 +24,14 @@ docker compose logs clickhouse
 type clickhouse/01_schema_etl.sql | docker compose exec -T clickhouse clickhouse-client --user cardops --password cardops_pwd --multiquery
 
 type clickhouse/02_features_velocity_deviation.sql | docker compose exec -T clickhouse clickhouse-client --user cardops --password cardops_pwd --format PrettyCompact
+
+
+# Итоговая прод сборка
+
+## 0. docker compose up -d --build      — поднять весь стенд (postgres, clickhouse, minio, mlflow)
+##    curl http://localhost:9000/minio/health/live   — убедиться, что MinIO ответил
+## 1. python training/train.py          — обучение + артефакты в training/artifacts/
+## 2. docker compose up -d --build scoring-api       — собрать и поднять сервис
+## 3. curl http://localhost:8080/health — проверка, что сервис ок
+
+

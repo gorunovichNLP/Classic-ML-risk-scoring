@@ -1,0 +1,31 @@
+{
+  "features": [
+    "amount",
+    "hour",
+    "channel",
+    "entry_mode",
+    "is_ecommerce",
+    "is_recurring",
+    "is_tokenized",
+    "country",
+    "ip_mismatch",
+    "vel_1h",
+    "vel_24h",
+    "vel_7d",
+    "secs_since_prev",
+    "amount_z",
+    "decline_rate_20",
+    "mcc",
+    "risk_segment",
+    "merchant_fraud_rate_pit"
+  ],
+  "cat_features": [
+    "channel",
+    "entry_mode",
+    "country",
+    "mcc",
+    "risk_segment"
+  ],
+  "threshold": 0.725,
+  "label": "label"
+}
